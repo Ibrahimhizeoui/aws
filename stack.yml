@@ -1,0 +1,632 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+####
+## PARAMETERS ##
+####
+Parameters:
+  AccountId:
+    Default: 207588528645
+    Type : String
+    Description: stage
+  Stage:
+    Default: dev
+    Type : String
+    Description: stage
+  ImageVersion:
+    Default: latest
+    Type : String
+    Description: image tag
+  EIPAllocationIdA:
+    Type : String
+    Default: eipalloc-06ff8bed50fee20fc
+  EIPAllocationIdB:
+    Type : String
+    Default: eipalloc-0f23491553f3bcedd
+  DCPUrl:
+    Type: String
+    Default: http://doe-dcp-simulator-LB-925393749.eu-north-1.elb.amazonaws.com/dcp-simulator
+  DCPUser:
+    Type: String
+    Default: user
+  DCPPassword:
+    Type: String
+    Default: password
+  DCPRestPath:
+    Type: String
+    Default: ''
+  DCPKeyname:
+    Type: String
+    Default: doe-access-eu-north-1
+  DCPRegion:
+    Type: String
+    Default: eu-north-1
+  DCPAMI:
+    Type: String
+    Default: ami-0a92075786c5779b9
+####
+## RESOURCES ##
+####
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: doe-vpc
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: doe-igw
+  
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: InternetGateway
+  
+  NatGatewayA:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: 
+        !Ref EIPAllocationIdA
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: doe-ngw
+  
+  NatGatewayB:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: 
+        !Ref EIPAllocationIdB
+      SubnetId: !Ref PublicSubnetB
+      Tags:
+        - Key: Name
+          Value: doe-ngw
+  PublicSubnetA:
+    DependsOn: VPC
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Join ['', [!Ref 'DCPRegion', a]]
+      CidrBlock: 10.0.1.0/24
+      Tags:
+        - Key: Name
+          Value: doe-public-subnet-a
+  PublicSubnetB:
+    DependsOn: VPC
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Join ['', [!Ref 'DCPRegion', b]]
+      CidrBlock: 10.0.2.0/24
+      Tags:
+        - Key: Name
+          Value: doe-public-subnet-b
+  
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value: doe-public-rt
+  PublicRouteGateway:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+  PublicSubnetRouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnetA
+      RouteTableId:
+        Ref: PublicRouteTable
+  PublicSubnetRouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnetB
+      RouteTableId:
+        Ref: PublicRouteTable
+  
+  
+  PrivateSubnetA:
+    DependsOn: VPC
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Join ['', [!Ref 'DCPRegion', a]]
+      CidrBlock: 10.0.3.0/24
+      Tags:
+        - Key: Name
+          Value: doe-private-subnet-a
+  PrivateSubnetB:
+    DependsOn: VPC
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      AvailabilityZone: !Join ['', [!Ref 'DCPRegion', b]]
+      CidrBlock: 10.0.4.0/24
+      Tags:
+        - Key: Name
+          Value: doe-private-subnet-b
+
+  PrivateRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value: doe-private-rt
+  PrivateRouteGatewayA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NatGatewayA
+  
+  PrivateRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value: doe-private-rt
+  PrivateRouteGatewayB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NatGatewayB
+  
+  PrivateSubnetRouteTableAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnetA
+      RouteTableId:
+        Ref: PrivateRouteTableA
+  PrivateSubnetRouteTableAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnetB
+      RouteTableId:
+        Ref: PrivateRouteTableB
+
+  
+  
+## CONTAINER SERVICE SETUP ##
+  DOECluster:
+    Type: AWS::ECS::Cluster
+  DoeTaskdefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Join ['', [!Ref 'AWS::StackName', -doe-micro-service-task]]
+      ExecutionRoleArn: !Ref TaskExecutionRole
+      ContainerDefinitions:
+        - 
+          Name: "doe-app"
+          Image: !Join ['', [!Ref AccountId,'.dkr.ecr.',!Ref DCPRegion,'.amazonaws.com/doe-', !Ref Stage, '-repository:', !Ref ImageVersion,]]
+          Cpu: "128"
+          MemoryReservation: "128"
+          Essential: "true"
+          PortMappings:
+          - 
+            HostPort: 80
+            ContainerPort: 8080
+            Protocol: tcp
+          Environment:
+          -
+            Name: USER_PROFILE_WSDL_URL
+            Value: !Join [ '', [ !Ref DCPUrl,/services/ws/userprofile/v1/UserProfile.wsdl ] ]
+          -
+            Name: USER_PROFILE_URL
+            Value: !Join [ '', [ !Ref DCPUrl,/services/ws/userprofile/v1/UserProfile ] ]
+          -
+            Name: USER_PROFILE_USERNAME
+            Value: !Ref DCPUser
+          -
+            Name: USER_PROFILE_PASSWORD
+            Value: !Ref DCPPassword
+          -
+            Name: COMMERCE_WSDL_URL
+            Value: !Join [ '', [ !Ref DCPUrl,/services/ws/commerce/v8/Commerce.wsdl ] ]
+          -
+            Name: COMMERCE_URL
+            Value: !Join [ '', [ !Ref DCPUrl,/services/ws/commerce/v8/Commerce ] ]
+          -
+            Name: COMMERCE_USERNAME
+            Value: !Ref DCPUser
+          -
+            Name: COMMERCE_PASSWORD
+            Value: !Ref DCPPassword
+          -
+            Name: REST_BASE_URL
+            Value: !Join [ '', [ !Ref DCPUrl,!Ref DCPRestPath ] ]
+          -
+            Name: REST_USERNAME
+            Value: !Ref DCPUser
+          -
+            Name: REST_PASSWORD
+            Value: !Ref DCPPassword
+  DoeService:
+    Type: AWS::ECS::Service
+    DependsOn: LoadBalancerListener
+    Properties:
+      Cluster: !Ref 'DOECluster'
+      DesiredCount: '1'
+      LoadBalancers:
+      - ContainerName: doe-app
+        ContainerPort: '8080'
+        TargetGroupArn: !Ref 'LoadBalancerTargetGroup'
+      Role: !Ref 'ECSServiceRole'
+      TaskDefinition: !Ref 'DoeTaskdefinition'
+
+## SERVICE SCALING SETUP ##
+  ServiceScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: DoeService
+    Properties:
+      MaxCapacity: 5
+      MinCapacity: 1
+      ResourceId: !Join ['', [service/, !Ref 'DOECluster', /, !GetAtt DoeService.Name]]
+      RoleARN: !GetAtt AutoscalingRole.Arn
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+  ServiceScaleUpAt500RespPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ScaleUpAt500ResponsePolicy
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+        - MetricIntervalLowerBound: 0
+          ScalingAdjustment: 1
+  ServiceScaleUpAt80CpuPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ScaleUpAtCpuAbove80Policy
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 300
+        MetricAggregationType: Average
+        StepAdjustments:
+        - MetricIntervalLowerBound: 0
+          ScalingAdjustment: 1
+  ServiceScaleDownAt20CpuPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: ScaleDownAtCpuBelow20Policy
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref 'ServiceScalingTarget'
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 300
+        MetricAggregationType: Average
+        StepAdjustments:
+        - MetricIntervalUpperBound: 0
+          ScalingAdjustment: -1
+
+## SERVICE ROLES ##
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: task-execution-role
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: ["ecr:GetAuthorizationToken", "ecr:BatchCheckLayerAvailability", 
+              "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage", 
+              "logs:CreateLogStream", "logs:PutLogEvents"]
+            Resource: '*'
+  ECSServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: ['elasticloadbalancing:DeregisterInstancesFromLoadBalancer', 
+              'elasticloadbalancing:DeregisterTargets', 'elasticloadbalancing:Describe*', 
+              'elasticloadbalancing:RegisterInstancesWithLoadBalancer',
+              'elasticloadbalancing:RegisterTargets', 'ec2:Describe*', 
+              'ec2:AuthorizeSecurityGroupIngress']
+            Resource: '*'
+
+## LOAD BALANCING SETUP ##  
+  DOELoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: 
+        !Join
+          - '-'
+          - - 'DOELoadBalancer'
+            - !Ref Stage
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '30'
+      Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+      SecurityGroups: [!Ref 'DoeEcsSecurityGroup']
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn: ECSServiceRole
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn: !Ref 'LoadBalancerTargetGroup'
+      LoadBalancerArn: !Ref DOELoadBalancer
+      Port: '80'
+      Protocol: HTTP
+  LoadBalancerListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    DependsOn: LoadBalancerListener
+    Properties:
+      Actions:
+      - Type: forward
+        TargetGroupArn: !Ref 'LoadBalancerTargetGroup'
+      Conditions:
+      - Field: path-pattern
+        Values: [/]
+      ListenerArn: !Ref LoadBalancerListener
+      Priority: 1
+  LoadBalancerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    DependsOn: DOELoadBalancer
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /dcp-service-api/api/echo/health-check
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      Name: 
+        !Join
+          - '-'
+          - - 'DOELoadBalancer'
+            - !Ref Stage
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref 'VPC'
+
+## EC2 SCALING SETUP ##
+  DOEAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: [!Ref PrivateSubnetA]
+      LaunchConfigurationName: !Ref 'ContainerInstances'
+      MinSize: 1
+      MaxSize: 5
+      DesiredCapacity: 1
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: 'true'
+  ContainerInstances:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !Ref DCPAMI
+      SecurityGroups: [!Ref 'DoeEcsSecurityGroup']
+      InstanceType: t3.micro
+      IamInstanceProfile: !Ref 'EC2InstanceProfile'
+      KeyName: !Ref DCPKeyname
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          echo ECS_CLUSTER=${DOECluster} >> /etc/ecs/ecs.config
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource DOEAutoScalingGroup --region ${AWS::Region}
+  ScaleUpDoeEc2Cluster:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref DOEAutoScalingGroup
+      EstimatedInstanceWarmup: 300
+      MetricAggregationType: Average
+      PolicyType: StepScaling
+      StepAdjustments:
+        - 
+          MetricIntervalLowerBound: 0
+          ScalingAdjustment: 1
+  ScaleDownDoeEc2Cluster:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref DOEAutoScalingGroup
+      EstimatedInstanceWarmup: 300
+      MetricAggregationType: Average
+      PolicyType: StepScaling
+      StepAdjustments:
+        - 
+          MetricIntervalUpperBound: 0
+          ScalingAdjustment: -1
+                
+## EC2 CLUSTER ROLES ##
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ec2.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: ecs-service
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: ['ecs:CreateCluster', 'ecs:DeregisterContainerInstance', 
+              'ecs:DiscoverPollEndpoint', 'ecs:Poll', 'ecs:RegisterContainerInstance', 
+              'ecs:StartTelemetrySession', 'ecs:Submit*', 'logs:CreateLogStream', 
+              'logs:PutLogEvents']
+            Resource: '*'
+  AutoscalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [application-autoscaling.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+      - PolicyName: service-autoscaling
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: ['application-autoscaling:*', 'cloudwatch:DescribeAlarms', 
+              'cloudwatch:PutMetricAlarm', 'ecs:DescribeServices', 
+              'ecs:UpdateService']
+            Resource: '*'
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles: [!Ref 'EC2Role']
+
+## ALARMS FOR SCALING ##
+  LoadBalancer500sAlarmScaleUp:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: 1
+      Statistic: Average
+      Threshold: 10
+      AlarmDescription: Alarm if our ALB generates too many HTTP 500s.
+      Period: 60
+      AlarmActions: [!Ref 'ServiceScaleUpAt500RespPolicy']
+      Namespace: AWS/ApplicationELB
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt DOELoadBalancer.LoadBalancerFullName
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: HTTPCode_ELB_5XX_Count
+  AutoScalingGroupCPUAbove80ScaleUp:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: 1
+      Statistic: Average
+      Threshold: 80
+      AlarmDescription: Alarm if DOE's autoscaling group's CPUs runs at above 80%.
+      Period: 60
+      AlarmActions: [!Ref ScaleUpDoeEc2Cluster, !Ref ServiceScaleUpAt80CpuPolicy]
+      Namespace: AWS/EC2
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref DOEAutoScalingGroup
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: "CPUUtilization"
+  AutoScalingGroupCPUBelow20ScaleDown:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: 6
+      Statistic: Average
+      Threshold: 20
+      AlarmDescription: Alarm if DOE's autoscaling group's CPUs runs at below 20%. Period is longer 
+        than instance warmup and service task cooldown. This makes sure that the polices can be 
+        executed and makes for a calmer scale down.
+      Period: 60
+      AlarmActions: [!Ref ScaleDownDoeEc2Cluster, !Ref ServiceScaleDownAt20CpuPolicy]
+      Namespace: AWS/EC2
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref DOEAutoScalingGroup
+      ComparisonOperator: LessThanThreshold
+      MetricName: "CPUUtilization"
+
+## DOE MICRO-SERVICE ACCESS ##
+  DoeEcsSecurityGroup:
+    DependsOn: VPC
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS Security Group
+      VpcId: !Ref VPC
+  EcsSecurityGroupHTTPinbound:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DoeEcsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      CidrIp: 0.0.0.0/0
+  EcsSecurityGroupSSHinboundSTHML:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DoeEcsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      CidrIp: 89.255.244.218/32
+  EcsSecurityGroupALBports:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DoeEcsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 31000
+      ToPort: 61000
+      SourceSecurityGroupId: !Ref DoeEcsSecurityGroup
+
+## LOGGING ##
+  CloudwatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['-', [ECSLogGroup, !Ref 'AWS::StackName']]
+      RetentionInDays: 14
+
+###
+## STACK OUTPUTS ##
+###
+Outputs:
+  doeLoadBalancer:
+    Description: The DNS Name for DOE's LoadBalancer.
+    Value: !Join ['', [!GetAtt DOELoadBalancer.DNSName]]
